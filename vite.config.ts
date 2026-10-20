@@ -24,7 +24,10 @@ export default defineConfig({
     rollupOptions: { input: { main: "index.html", manager: "manager.html", phone: "phone.html", testScreen: "test-screen.html" } }
   },
   server: {
-    port: 5173,
+    // DogMaAI's own port, matching its Tailscale address. Other projects' dev servers start at 5173, and Tailscale forwards
+    // to whatever answers on this port, so DogMaAI never moves off it: if it is taken, DogMaAI stops with an error.
+    port: 5443,
+    strictPort: true,
     // Tailscale's private serve proxy brings the owner's phone in under this Mac's *.ts.net name; ownerOnly() checks who.
     allowedHosts: [".ts.net"],
     // The real address is passed on (changeOrigin: false), so the API can tell this Mac from a device that came in

@@ -13,9 +13,9 @@ npm install
 npm run dev
 ```
 
-Open <http://localhost:5173>. The API runs on <http://localhost:3001> and stores local data in `data/nightwatch.sqlite`.
+Open <http://localhost:5443>. The API runs on <http://localhost:3001> and stores local data in `data/nightwatch.sqlite`.
 
-The manager is at <http://localhost:5173/> (also `/manager.html`), with three pages in the sidebar: **Overview**, **Settings** and **PetAnalytics**. Services are set up in `.env` only; the Settings tab shows their status, camera setup and demo assets, and never asks for keys. Liquid AI is found automatically once `npm run vision` is running. See [Manager setup](./MANAGER_SETUP.md) for the supported behavior and remaining integration work.
+The manager is at <http://localhost:5443/> (also `/manager.html`), with three pages in the sidebar: **Overview**, **Settings** and **PetAnalytics**. Services are set up in `.env` only; the Settings tab shows their status, camera setup and demo assets, and never asks for keys. Liquid AI is found automatically once `npm run vision` is running. See [Manager setup](./MANAGER_SETUP.md) for the supported behavior and remaining integration work.
 
 | Feature | What it does | Needs |
 |---|---|---|
@@ -73,4 +73,4 @@ npm run vision   # Liquid vision model for live camera descriptions; see MANAGER
 
 ### Manager
 
-Open `http://localhost:5173/` (or `/manager.html`) for the manager. It includes alert guidance, expandable room context, the dog diary, comfort tools, PetAnalytics, session recovery checks, and **Camera → Connect phone**. See [MANAGER_SETUP.md](MANAGER_SETUP.md) for pairing requirements and limitations.
+Open `http://localhost:5443/` (or `/manager.html`) for the manager. It includes alert guidance, expandable room context, the dog diary, comfort tools, PetAnalytics, session recovery checks, and **Camera → Connect phone**. See [MANAGER_SETUP.md](MANAGER_SETUP.md) for pairing requirements and limitations.

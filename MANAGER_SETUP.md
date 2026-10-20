@@ -1,6 +1,6 @@
 # DogMaAI manager
 
-Open **http://localhost:5173/** after `npm run dev`.
+Open **http://localhost:5443/** after `npm run dev`. DogMaAI keeps to its own port, 5443, so it never collides with other projects' dev servers, which start at 5173; if 5443 is taken, `npm run dev` stops with an error rather than moving.
 
 The manager is the page at `/`. Its activity lights follow actual fixture observations and engine updates. Clicking an event shows its evidence, a rule-based decision summary and its result. These summaries are not model chain-of-thought.
 
@@ -158,7 +158,7 @@ DogMaAI keeps running on this Mac, which reads the camera on the home Wi-Fi and 
 
 1. Install Tailscale on this Mac and on your phone, and sign in to the same Tailscale account on both.
 2. With DogMaAI running, give it a private HTTPS address on your tailnet (once; Tailscale remembers it):
-   `tailscale serve --bg --https=5443 http://localhost:5173`
+   `tailscale serve --bg --https=5443 http://localhost:5443`
 3. On your phone, open `https://<this Mac's name>.<your tailnet>.ts.net:5443`. `tailscale serve status` prints the exact address.
 
 Who gets in: someone on this Mac, or **the Tailscale login this Mac is signed in with**, on their own devices. Both the web server and the API check every request: a request that came through Tailscale's serve proxy must carry that login, at this Mac's private name on port 5443, and DogMaAI's controls also need the DogMaAI page's own origin. Tailscale sets the login itself (it deletes any login a device sends, and adds none for tagged machines), so other people, shared and tagged machines are refused, and a request that came through Tailscale is never taken for this Mac. DogMaAI reads the login from `tailscale status`; set `TAILSCALE_CLI` in `.env` if the `tailscale` command is not on DogMaAI's PATH, and `DOGMAAI_TAILNET_PORT` if you serve it on another port. Do not turn on Funnel for this port: Funnel publishes to the public internet. To stop sharing, run `tailscale serve --https=5443 off`.
@@ -167,8 +167,28 @@ Who gets in: someone on this Mac, or **the Tailscale login this Mac is signed in
 |---|---|---|
 | "DogMaAI opens on this Mac, or on your own devices through Tailscale" | Tailscale is off or signed out on the Mac, or the phone is signed in to another account | Sign both in to the same account; DogMaAI rechecks within 5 minutes, or restart it |
 | The page does not load at all | The Mac is asleep, offline, or DogMaAI is not running | Keep the Mac awake and DogMaAI running |
+| "Blocked request. This host is not allowed" | Another project's dev server is answering on the port Tailscale forwards to | Point Tailscale at DogMaAI's own port: `tailscale serve --bg --https=5443 http://localhost:5443` |
 
 Pages watching the home camera together (this Mac and a phone, say) share readings: a page is given another page's Liquid AI reading from the last 10 seconds instead of taking its own, so PetAnalytics does not count the same moment twice, while a page on its own still takes one every 12 seconds. Connecting a *phone as the camera* still makes a temporary public Cloudflare link for that phone, as before.
+
+## Keep DogMaAI running (start at login, macOS)
+
+Two LaunchAgents in `~/Library/LaunchAgents` start DogMaAI when you log in, and again if it crashes:
+
+| Agent | Runs | Serves |
+|---|---|---|
+| `com.dogmaai.app` | `npm run dev` with `PORT=3001` | The page on 5443 and the API on 3001 |
+| `com.dogmaai.vision` | `npm run vision` | Liquid AI on 8081 |
+
+Each starts in the project folder with a PATH that includes Node (nvm), ffmpeg, `tailscale` and `cloudflared`, since agents do not read your shell's settings. Logs go to `~/Library/Logs/DogMaAI/app.log` and `vision.log`. The first time, macOS may ask to let `node` use the Desktop folder (the project is there) or find devices on your local network (the camera): allow both. While the agents run, do not also start `npm run dev` yourself; it would find port 5443 taken and stop. Camera readings still need the home camera open on a DogMaAI page, on this Mac or your phone.
+
+```bash
+launchctl kickstart -k gui/$(id -u)/com.dogmaai.app   # restart
+launchctl bootout gui/$(id -u)/com.dogmaai.app        # stop until the next login (also com.dogmaai.vision)
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.dogmaai.app.plist   # start again
+```
+
+To stop starting at login, stop both agents and delete their two `.plist` files. After upgrading Node with nvm, update the `npm` path in both files.
 
 ## Integrated backend demo
 

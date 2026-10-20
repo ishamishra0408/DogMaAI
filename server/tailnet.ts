@@ -42,9 +42,10 @@ export function watchTailnetOwner(read: () => Promise<string> = readStatus, port
   return { owner: () => owner, refresh, stop: () => clearInterval(timer) };
 }
 
-// DogMaAI's own ports on this Mac: the web page's, the API's default, and the API's port if PORT moves it, so go2rtc's
-// sound links keep working there. Read when asked, after .env is loaded.
-const localPorts = () => new Set(["5173", "3001", process.env.PORT ?? ""].filter(Boolean));
+// DogMaAI's own ports on this Mac: the web page's (5443, so pages of other local projects, which start at 5173, are not
+// taken for DogMaAI), the API's default, and the API's port if PORT moves it, so go2rtc's sound links keep working there.
+// Read when asked, after .env is loaded.
+const localPorts = () => new Set(["5443", "3001", process.env.PORT ?? ""].filter(Boolean));
 const onThisMac = (value: string, pattern: RegExp) => { const match = value.match(pattern); return Boolean(match) && localPorts().has(match![2]); };
 const localHost = (host: string) => onThisMac(host, /^(localhost|127\.0\.0\.1|\[::1\]):(\d+)$/);
 const localOrigin = (origin: string) => onThisMac(origin, /^http:\/\/(localhost|127\.0\.0\.1|\[::1\]):(\d+)$/);

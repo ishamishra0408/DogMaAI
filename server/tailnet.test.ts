@@ -30,16 +30,16 @@ describe("who is asking", () => {
   const ask = (headers: Record<string, string>, remoteAddress = "127.0.0.1") => whoIsAsking({ headers: Object.fromEntries(Object.entries(headers).map(([key, value]) => [key.toLowerCase(), value])), socket: { remoteAddress } }, owner);
   const phone = { Host: `${owner.host}:5443`, Origin: `https://${owner.host}:5443`, "Tailscale-User-Login": owner.login, "X-Forwarded-For": "100.64.0.2", "X-Forwarded-Host": `${owner.host}:5443` };
   it("tells this Mac, the owner's devices and everyone else apart", () => {
-    expect(ask({ Host: "localhost:5173" })).toBe("this-mac");
-    expect(ask({ Host: "[::1]:5173", Origin: "http://localhost:5173" })).toBe("this-mac");
+    expect(ask({ Host: "localhost:5443" })).toBe("this-mac");
+    expect(ask({ Host: "[::1]:5443", Origin: "http://localhost:5443" })).toBe("this-mac");
     expect(ask(phone)).toBe("owner");
     // Only DogMaAI's own port: the same name also has other projects on other ports, one of them public through Funnel.
     expect(ask({ ...phone, Host: owner.host, Origin: `https://${owner.host}` })).toBeNull();
     expect(ask({ ...phone, Host: `${owner.host}:443`, Origin: `https://${owner.host}:443` })).toBeNull();
     // Through Tailscale, an address that reads as this Mac proves nothing.
-    expect(ask({ ...phone, Host: "localhost:5173", Origin: "" })).toBeNull();
+    expect(ask({ ...phone, Host: "localhost:5443", Origin: "" })).toBeNull();
     // Not from this Mac's own loopback at all.
-    expect(ask({ Host: "localhost:5173" }, "192.168.1.20")).toBeNull();
+    expect(ask({ Host: "localhost:5443" }, "192.168.1.20")).toBeNull();
   });
 
   it("follows the API to another port set by PORT, so go2rtc's sound links keep working there", () => {
@@ -48,8 +48,11 @@ describe("who is asking", () => {
       expect(ask({ Host: "127.0.0.1:4001" })).toBeNull();
       process.env.PORT = "4001";
       expect(ask({ Host: "127.0.0.1:4001" })).toBe("this-mac");
-      // Other local ports, such as another project's server, are still not DogMaAI's page.
-      expect(ask({ Host: "localhost:5173", Origin: "http://localhost:8787" })).toBeNull();
+      // Other local ports, such as another project's server, are still not DogMaAI's page: a page of another project's dev
+      // server on the usual Vite port cannot use DogMaAI.
+      expect(ask({ Host: "localhost:5443", Origin: "http://localhost:8787" })).toBeNull();
+      expect(ask({ Host: "localhost:5443", Origin: "http://localhost:5173" })).toBeNull();
+      expect(ask({ Host: "localhost:5173" })).toBeNull();
     } finally {
       if (before === undefined) delete process.env.PORT; else process.env.PORT = before;
     }
@@ -63,7 +66,7 @@ describe("who is asking", () => {
       gate({ headers: Object.fromEntries(Object.entries(headers).map(([key, value]) => [key.toLowerCase(), value])), socket: { remoteAddress: "127.0.0.1" } } as never, response as never, () => { passed = true; });
       return passed ? 200 : response.statusCode;
     };
-    expect(run({ Host: "localhost:5173" })).toBe(200);
+    expect(run({ Host: "localhost:5443" })).toBe(200);
     expect(run(phone)).toBe(200);
     // A tagged machine, which Tailscale gives no login, asking for a data file.
     expect(run({ Host: `${owner.host}:5443`, "X-Forwarded-For": "100.64.0.9", "X-Forwarded-Host": `${owner.host}:5443` })).toBe(403);
@@ -84,9 +87,9 @@ describe("who is asking", () => {
     expect(upgrade({ Host: `${owner.host}:5443`, "X-Forwarded-For": "100.64.0.9", Upgrade: "websocket" })).toContain("403");
     expect(reached).toEqual([]);
     // This Mac and the owner's phone reach Vite's live reload as before.
-    expect(upgrade({ Host: "localhost:5173", Upgrade: "websocket" })).toBe("");
+    expect(upgrade({ Host: "localhost:5443", Upgrade: "websocket" })).toBe("");
     expect(upgrade({ ...phone, Upgrade: "websocket" })).toBe("");
-    expect(reached).toEqual(["localhost:5173", `${owner.host}:5443`]);
+    expect(reached).toEqual(["localhost:5443", `${owner.host}:5443`]);
   });
 });
 
@@ -113,8 +116,8 @@ describe("who may manage DogMaAI", () => {
   const fromPhone = { Host: `${owner.host}:5443`, Origin: `https://${owner.host}:5443`, "Tailscale-User-Login": owner.login, "X-Nightwatch-Local": "1" };
 
   it("lets this Mac in, as before", async () => {
-    expect(await call({ Host: "localhost:5173", "X-Nightwatch-Local": "1" })).toBe(200);
-    expect(await call({ Host: "localhost:5173" })).toBe(403);
+    expect(await call({ Host: "localhost:5443", "X-Nightwatch-Local": "1" })).toBe(200);
+    expect(await call({ Host: "localhost:5443" })).toBe(403);
   });
 
   it("lets the owner in from their own devices through Tailscale, including sound controls", async () => {
@@ -141,10 +144,10 @@ describe("who may manage DogMaAI", () => {
   it("never takes a request that came through Tailscale for this Mac, even if its address was rewritten on the way", async () => {
     allowTailnetOwner(() => owner);
     // A script on a tagged machine: no login, no origin, and an address that reads as this Mac.
-    expect(await call({ Host: "localhost:5173", "X-Forwarded-For": "100.64.0.9", "X-Nightwatch-Local": "1" })).toBe(403);
-    expect(await call({ Host: "localhost:5173", "X-Forwarded-Host": `${owner.host}:5443`, "X-Nightwatch-Local": "1" })).toBe(403);
+    expect(await call({ Host: "localhost:5443", "X-Forwarded-For": "100.64.0.9", "X-Nightwatch-Local": "1" })).toBe(403);
+    expect(await call({ Host: "localhost:5443", "X-Forwarded-Host": `${owner.host}:5443`, "X-Nightwatch-Local": "1" })).toBe(403);
     // Even the owner's login does not help when the address is not this Mac's private name.
-    expect(await call({ Host: "localhost:5173", "Tailscale-User-Login": owner.login, "X-Nightwatch-Local": "1" })).toBe(403);
+    expect(await call({ Host: "localhost:5443", "Tailscale-User-Login": owner.login, "X-Nightwatch-Local": "1" })).toBe(403);
   });
 
   it("serves the one-time camera sound links to this Mac only, never through Tailscale", async () => {
@@ -155,9 +158,9 @@ describe("who may manage DogMaAI", () => {
 
   it("lets only the owner use the demo sessions, which a plain page request or event stream reaches without the page header", async () => {
     allowTailnetOwner(() => owner);
-    expect(await call({ Host: "localhost:5173" }, "GET", "/sessions")).toBe(200);
+    expect(await call({ Host: "localhost:5443" }, "GET", "/sessions")).toBe(200);
     expect(await call({ Host: `${owner.host}:5443`, "Tailscale-User-Login": owner.login }, "GET", "/sessions")).toBe(200);
     expect(await call({ Host: `${owner.host}:5443`, "X-Forwarded-For": "100.64.0.9" }, "GET", "/sessions")).toBe(403);
-    expect(await call({ Host: "localhost:5173", Origin: "https://evil.example" }, "POST", "/sessions")).toBe(403);
+    expect(await call({ Host: "localhost:5443", Origin: "https://evil.example" }, "POST", "/sessions")).toBe(403);
   });
 });

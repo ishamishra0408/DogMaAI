@@ -152,6 +152,24 @@ DogMaAI starts go2rtc when the first sound is played, with its output discarded 
 | The camera speaker did not start | The camera is online; Third-Party Compatibility is on in the Tapo app; the setup used the Tapo app password; `CAMERA_SPEAKER_STREAM` names `camera_sha256`, or `camera_md5` for older firmware |
 | go2rtc did not start | `GO2RTC_BIN`, `GO2RTC_CONFIG` and `GO2RTC_API_PASSWORD` in `.env`; `ffmpeg: bin:` in `go2rtc.yaml` points at ffmpeg 5 or newer (set `GO2RTC_FFMPEG` and re-run the setup to change it) |
 
+## Use DogMaAI from your phone, anywhere (Tailscale)
+
+DogMaAI keeps running on this Mac, which reads the camera on the home Wi-Fi and runs the AI models. Tailscale makes a private network between your own devices, so your phone can open DogMaAI from any network, with every control, including comfort sounds through the camera.
+
+1. Install Tailscale on this Mac and on your phone, and sign in to the same Tailscale account on both.
+2. With DogMaAI running, give it a private HTTPS address on your tailnet (once; Tailscale remembers it):
+   `tailscale serve --bg --https=5443 http://localhost:5173`
+3. On your phone, open `https://<this Mac's name>.<your tailnet>.ts.net:5443`. `tailscale serve status` prints the exact address.
+
+Who gets in: someone on this Mac, or **the Tailscale login this Mac is signed in with**, on their own devices. Both the web server and the API check every request: a request that came through Tailscale's serve proxy must carry that login, at this Mac's private name on port 5443, and DogMaAI's controls also need the DogMaAI page's own origin. Tailscale sets the login itself (it deletes any login a device sends, and adds none for tagged machines), so other people, shared and tagged machines are refused, and a request that came through Tailscale is never taken for this Mac. DogMaAI reads the login from `tailscale status`; set `TAILSCALE_CLI` in `.env` if the `tailscale` command is not on DogMaAI's PATH, and `DOGMAAI_TAILNET_PORT` if you serve it on another port. Do not turn on Funnel for this port: Funnel publishes to the public internet. To stop sharing, run `tailscale serve --https=5443 off`.
+
+| On the phone you see | Why | What to do |
+|---|---|---|
+| "DogMaAI opens on this Mac, or on your own devices through Tailscale" | Tailscale is off or signed out on the Mac, or the phone is signed in to another account | Sign both in to the same account; DogMaAI rechecks within 5 minutes, or restart it |
+| The page does not load at all | The Mac is asleep, offline, or DogMaAI is not running | Keep the Mac awake and DogMaAI running |
+
+Pages watching the home camera together (this Mac and a phone, say) share readings: a page is given another page's Liquid AI reading from the last 10 seconds instead of taking its own, so PetAnalytics does not count the same moment twice, while a page on its own still takes one every 12 seconds. Connecting a *phone as the camera* still makes a temporary public Cloudflare link for that phone, as before.
+
 ## Integrated backend demo
 
 Confirmed sample alerts appear in Activity with expandable messages and source links; saved sources are labeled separately. **Room context** reveals current confirmed state without adding a permanent dashboard panel. **Settings → Demo assets → Session checks** exposes blocked-view and saved-state recovery controls. The manager resumes sample playback after restoring state so fresh observations can reconfirm it. These notifications are in-app only.

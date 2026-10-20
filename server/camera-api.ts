@@ -152,6 +152,10 @@ export function createCameraService(publicOrigin: () => Promise<string>, now = D
     return response.json(action);
   });
   let analyzing = false;
+  // Home views share one camera, so a page open at the same time as another (this Mac and a phone, say) is given the
+  // other's reading from the last 10 seconds rather than adding its own, which would count the same moments twice in
+  // PetAnalytics. The page that took a reading never gets it back, so one page alone keeps its pace.
+  let lastHome: { at: number; by: string; result: Record<string, unknown> } | null = null;
   transport.post("/:id/analyze", async (request, response) => {
     const session = authorize(request, "owner");
     if (!session) return response.status(403).json({ error: "Camera pairing ended." });
@@ -159,8 +163,11 @@ export function createCameraService(publicOrigin: () => Promise<string>, now = D
     if (!endpoint) return response.status(409).json({ error: "Connect and test Liquid AI in Settings first." });
     const { frame, frameAt } = view(session);
     if (!frame || now() - frameAt > 5000) return response.status(409).json({ error: "Waiting for a fresh camera image." });
+    const age = lastHome ? now() - lastHome.at : Infinity;
+    if (session.home && lastHome && ((lastHome.by !== session.id && age < 10_000) || (analyzing && age < 30_000))) return response.json({ ...lastHome.result, diaryEntry: false, shared: true });
     if (analyzing) return response.status(429).json({ error: "Vision is still processing the previous image." });
     analyzing = true;
+    const started = now();
     try {
       const models = await fetch(`${endpoint}/models`, { signal: AbortSignal.timeout(5000) });
       if (!models.ok) throw new Error("The local vision model is unavailable.");
@@ -185,6 +192,7 @@ export function createCameraService(publicOrigin: () => Promise<string>, now = D
       // Every reading the model could make sense of feeds PetAnalytics; the diary keeps only the changes.
       if (view.dog_visible !== "unknown") onReading(observation);
       const entry = diary(observation);
+      if (session.home) lastHome = { at: started, by: session.id, result: { description, observedAt: frameAt, provider: "Liquid AI", view } };
       return response.json({ description, observedAt: frameAt, provider: "Liquid AI", view, diaryEntry: Boolean(entry) });
     } catch (reason) {
       return response.status(503).json({ error: reason instanceof Error ? reason.message : "Vision analysis failed." });

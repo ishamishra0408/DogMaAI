@@ -1,16 +1,28 @@
-import { Router, type RequestHandler } from "express";
+import { Router, type RequestHandler, type Response } from "express";
 import { z } from "zod";
+import { whoIsAsking, type TailnetOwner } from "./tailnet.js";
 
+let tailnetOwner: () => TailnetOwner | null = () => null;
+/** Lets the owner of this Mac's Tailscale login use DogMaAI from their own devices, through Tailscale's private serve
+ *  proxy on this Mac (see tailnet.ts for why that identity can be trusted). */
+export function allowTailnetOwner(owner: () => TailnetOwner | null) { tailnetOwner = owner; }
+
+const refuse = (response: Response) => response.status(403).json({ error: "Open DogMaAI on this Mac, or on your own devices through Tailscale." });
+/** The owner: someone on this Mac, or the Mac's Tailscale login on their own devices. For routes a plain page request or
+ *  event stream uses, which cannot add a header. */
+export const requireOwner: RequestHandler = (request, response, next) => {
+  if (whoIsAsking(request, tailnetOwner())) return next();
+  refuse(response);
+};
+/** This Mac only, never through Tailscale: for the one-time sound links go2rtc fetches here. */
+export const requireThisMac: RequestHandler = (request, response, next) => {
+  if (whoIsAsking(request, tailnetOwner()) === "this-mac") return next();
+  refuse(response);
+};
+/** The owner, from the DogMaAI page itself: the header it adds keeps other websites from using these routes. */
 export const requireLocalManager: RequestHandler = (request, response, next) => {
   response.setHeader("Cache-Control", "no-store");
-  const host = request.headers.host ?? "";
-  const origin = request.headers.origin;
-  const localHost = /^(localhost|127\.0\.0\.1|\[::1\]):(3001|5173)$/.test(host);
-  const localOrigin = !origin || /^http:\/\/(localhost|127\.0\.0\.1|\[::1\]):(3001|5173)$/.test(origin);
-  if (!localHost || !localOrigin || request.headers["x-nightwatch-local"] !== "1") {
-    response.status(403).json({ error: "Open Settings from the local DogMaAI app." });
-    return;
-  }
+  if (request.headers["x-nightwatch-local"] !== "1" || !whoIsAsking(request, tailnetOwner())) return void refuse(response);
   next();
 };
 // Text-only LFM models can share an endpoint with the vision model but cannot read camera images.

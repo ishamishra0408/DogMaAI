@@ -1,0 +1,14 @@
+{
+  "name": "DogMaAI",
+  "short_name": "DogMaAI",
+  "description": "Watch over your dog at home: the live camera, how they felt alone, and calm music when they need it.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#fdf7f0",
+  "theme_color": "#fdf7f0",
+  "icons": [
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}

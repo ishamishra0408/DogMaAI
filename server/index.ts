@@ -6,7 +6,8 @@ import type { RuntimeSnapshot } from "../shared/api.js";
 import { databaseHealth } from "./db.js";
 import { MockVisionProvider } from "./providers/mock-vision-provider.js";
 import { SessionRuntime } from "./session-runtime.js";
-import { createManagerRouter, findLiquidVisionModel, localModelEndpoint, type ServiceStates } from "./manager-api.js";
+import { allowTailnetOwner, requireOwner, requireThisMac, createManagerRouter, findLiquidVisionModel, localModelEndpoint, type ServiceStates } from "./manager-api.js";
+import { watchTailnetOwner } from "./tailnet.js";
 import { SqliteSessionPersistence } from "./persistence.js";
 import { createAlertEnricher } from "./alert-enrichment.js";
 import { createCameraService } from "./camera-api.js";
@@ -29,6 +30,9 @@ delete process.env.TINYBIRD_ADMIN_TOKEN;
 const app = express();
 const port = Number(process.env.PORT ?? 3001);
 const cameraPort = Number(process.env.CAMERA_PORT ?? 3002);
+// The owner's own devices can use DogMaAI through Tailscale's private serve proxy (see MANAGER_SETUP.md).
+const tailnet = watchTailnetOwner();
+allowTailnetOwner(tailnet.owner);
 const cameraTunnel = createCameraTunnel(cameraPort);
 // Every service is set up in .env; the manager only shows its state.
 function envTinybird(): TinybirdTarget | null {
@@ -96,8 +100,8 @@ app.disable("x-powered-by");
 app.use(express.json({ limit: "2mb" }));
 const cameraSpeaker = createCameraSpeaker({ stream: process.env.CAMERA_SPEAKER_STREAM, api: process.env.GO2RTC_API, apiPassword: process.env.GO2RTC_API_PASSWORD, bin: process.env.GO2RTC_BIN, config: process.env.GO2RTC_CONFIG, soundBase: `http://127.0.0.1:${port}/api/camera-sound` }, fetch, id => soundFinder.find(id), sound => void dogLog.recordEvent("comfort", sound, "camera").catch(() => {}));
 app.use("/api/manager/camera/speaker", cameraSpeaker.admin);
-// Only go2rtc on this computer fetches these one-time sound links; the phone gateway never serves them.
-app.use("/api/camera-sound", cameraSpeaker.sound);
+// Only go2rtc on this computer fetches these one-time sound links: never through Tailscale or the phone gateway.
+app.use("/api/camera-sound", requireThisMac, cameraSpeaker.sound);
 app.use("/api/manager/camera", camera.admin);
 app.use("/api/camera", camera.transport);
 app.use("/api/manager/diary", diary.router);
@@ -118,7 +122,7 @@ phoneGateway.get("/phone", (_request, response) => response.sendFile(resolve("di
 phoneGateway.use("/assets", express.static(resolve("dist/assets"), { index: false, dotfiles: "deny" }));
 phoneGateway.use((_request, response) => response.status(404).json({ error: "Not found" }));
 const phoneServer = phoneGateway.listen(cameraPort, "127.0.0.1");
-function closeCamera() { cameraTunnel.stop(); camera.dispose(); cameraSpeaker.dispose(); phoneServer.close(); }
+function closeCamera() { cameraTunnel.stop(); camera.dispose(); cameraSpeaker.dispose(); phoneServer.close(); tailnet.stop(); }
 process.once("exit", closeCamera);
 // Readings still waiting for their batch get up to two seconds to reach Tinybird before exit.
 const shutDown = () => { closeCamera(); void Promise.race([soundListener.flush().then(() => Promise.all([dogLog.flush(), hearing.flush()])), new Promise(resolve => setTimeout(resolve, 2_000))]).finally(() => process.exit(0)); };
@@ -138,7 +142,7 @@ function writeSse(response: Response, event: string, data: unknown): void {
   response.write(`data: ${JSON.stringify(data)}\n\n`);
 }
 
-app.get("/api/health", (_request, response) => {
+app.get("/api/health", requireOwner, (_request, response) => {
   response.json({
     status: "ok",
     service: "nightwatch-api",
@@ -147,6 +151,8 @@ app.get("/api/health", (_request, response) => {
   });
 });
 
+// The demo clip's monitoring sessions: the owner only, now that the owner's own devices can reach DogMaAI through Tailscale.
+app.use("/api/sessions", requireOwner);
 app.post("/api/sessions", (_request, response) => {
   const id = randomUUID();
   const runtime = new SessionRuntime(id, new MockVisionProvider(), 2, 32, persistence, alertEnricher, telemetrySink);

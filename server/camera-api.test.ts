@@ -174,3 +174,38 @@ it("describes the camera image, then hands what it says about the dog to the dia
     expect(JSON.stringify(requests[1])).not.toContain("image_url");
   } finally { vi.unstubAllGlobals(); }
 });
+
+it("shares one reading between pages watching the home camera, so the same moment is not counted twice", async () => {
+  const realFetch = globalThis.fetch;
+  let liquidCalls = 0;
+  vi.stubGlobal("fetch", async (input: string | URL | Request, init?: RequestInit) => {
+    const url = String(input);
+    if (!url.startsWith("http://localhost:8081/v1")) return realFetch(input, init);
+    if (url.endsWith("/models")) return Response.json({ data: [{ id: "LFM2.5-VL-3B" }] });
+    liquidCalls += 1;
+    // Liquid is slow: each of its two calls takes 1.5 seconds.
+    clock += 1_500;
+    const body = JSON.parse(String(init?.body));
+    return Response.json({ choices: [{ message: { content: body.response_format ? '{"dog_visible":"yes","activity":"resting","location":"bed","person_visible":"no"}' : "The dog is lying on its bed." } }] });
+  });
+  try {
+    visionEndpoint = "http://localhost:8081/v1";
+    const mac = (await startHome()).body; const phone = (await startHome()).body;
+    const analyze = async (page: { id: string; ownerToken: string }) => {
+      home.frame!(Buffer.from([255, 216, 255, 217]));
+      return (await fetch(`${base}/camera/${page.id}/analyze`, { method: "POST", headers: { Authorization: `Bearer ${page.ownerToken}` } })).json();
+    };
+    expect(await analyze(mac)).toMatchObject({ description: "The dog is lying on its bed." });
+    expect(liquidCalls).toBe(2);
+    // The phone asks 4 seconds after the Mac's reading began, and gets the same reading without a second one.
+    clock += 1_000;
+    expect(await analyze(phone)).toMatchObject({ description: "The dog is lying on its bed.", shared: true, diaryEntry: false });
+    expect(liquidCalls).toBe(2);
+    expect(observations).toHaveLength(1);
+    // The Mac's own next request, 12 seconds after its last began, takes a fresh reading even though Liquid is slow.
+    clock += 8_000;
+    expect((await analyze(mac)).shared).toBeUndefined();
+    expect(liquidCalls).toBe(4);
+    expect(observations).toHaveLength(2);
+  } finally { vi.unstubAllGlobals(); }
+});

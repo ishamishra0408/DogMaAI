@@ -24,6 +24,7 @@ The manager is at <http://localhost:5173/> (also `/manager.html`), with three pa
 | Comfort tools | Calm music and brown noise, on this computer or the camera's speaker, with a Soft / Normal / Loud camera volume | Camera speaker: go2rtc |
 | Find new sounds | Nimble searches Wikimedia Commons for free-license sounds you name, such as birdsong, or music that suits the time of day | Nimble key |
 | Dog diary | Saves Liquid AI's description whenever the dog's activity or place changes | Tinybird (`npm run tinybird:setup`) |
+| Phone, anywhere | Every control from your own phone on any network, through Tailscale's private serve proxy; only this Mac's Tailscale login gets in | Tailscale on the Mac and the phone |
 | Listen live | What the sound model hears through the home camera, second by second, and a crying cut-off tuned to the dog from moments you mark as crying or quiet (scores only, never sound) | Sound model (`npm run sound-model:setup`) |
 | PetAnalytics | How the dog felt when alone, how long it cried, whether the music helped, and its activity, naps and favourite spots, with tips and ideas linked to ASPCA, AKC and VCA; a labelled sample week until 8 hours are watched | Tinybird (`npm run tinybird:setup`); crying needs the sound model (`npm run sound-model:setup`) |
 | Sounds and whimsy | Soft clicks, whooshes and chimes made in the browser, a speaker switch, keycap buttons, flip tiles, wiggling icons and cloud edges, after joshwcomeau.com | Nothing |

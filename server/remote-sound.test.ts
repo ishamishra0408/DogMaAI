@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import { cameraSampleRate } from "./comfort-audio.js";
+import { cameraSampleRate, type SoundSource } from "./comfort-audio.js";
 import { createRemoteSource, isCommonsUpload } from "./remote-sound.js";
 
 const address = "https://upload.wikimedia.org/wikipedia/commons/a/ab/Calm_piano.wav";
@@ -15,6 +15,18 @@ function wav(seconds: number, level = 0.05, rate = 22_050) {
   return Buffer.concat([header, data]);
 }
 const settle = (milliseconds: number) => new Promise(resolve => setTimeout(resolve, milliseconds));
+// Reads a source until it ends, passing on each chunk with sound in it. Until ffmpeg has decoded something, read() returns
+// silence rather than null, to keep the camera's live stream open, so a loop that stops only on null would spin forever
+// and freeze the test process whenever ffmpeg is slow. This one waits between silent reads, and gives up at a deadline.
+async function readToEnd(source: SoundSource, onSound: (chunk: Float32Array) => void = () => {}, frames = cameraSampleRate, seconds = 15) {
+  const deadline = Date.now() + seconds * 1000;
+  while (Date.now() < deadline) {
+    const chunk = source.read(frames);
+    if (chunk === null) return true;
+    if (chunk.some(value => value !== 0)) onSound(chunk); else await settle(50);
+  }
+  return false;
+}
 
 it("plays only Wikimedia Commons uploads", () => {
   expect(isCommonsUpload(address)).toBe(true);
@@ -29,10 +41,8 @@ it("plays only Wikimedia Commons uploads", () => {
 it("decodes a recording to camera audio at the built-in sounds' level, with a fade-in", async () => {
   let requested = "";
   const source = createRemoteSource(address, async input => { requested = String(input); return new Response(wav(8)); });
-  // Decoding runs ahead of playback, so after a short wait the whole recording is ready.
-  await settle(2500);
   const chunks: Float32Array[] = [];
-  for (let chunk = source.read(cameraSampleRate); chunk; chunk = source.read(cameraSampleRate)) chunks.push(chunk);
+  try { expect(await readToEnd(source, chunk => chunks.push(chunk))).toBe(true); } finally { source.close?.(); }
   const audio = Float32Array.from(chunks.flatMap(chunk => [...chunk]));
   expect(requested).toBe(address);
   expect(audio.length / cameraSampleRate).toBeGreaterThan(7.5);
@@ -45,19 +55,14 @@ it("decodes a recording to camera audio at the built-in sounds' level, with a fa
 }, 20_000);
 
 it("ends quietly when the recording cannot be downloaded or playback is closed", async () => {
+  // Until either ends, it plays only silence.
   const missing = createRemoteSource(address, async () => new Response("gone", { status: 404 }));
-  let ended = false;
-  for (let attempt = 0; attempt < 100 && !ended; attempt++) {
-    const chunk = missing.read(1600);
-    if (chunk === null) ended = true; else expect(chunk.every(value => value === 0)).toBe(true);
-    await settle(50);
-  }
-  expect(ended).toBe(true);
+  let sound = false;
+  try { expect(await readToEnd(missing, () => { sound = true; }, 1600)).toBe(true); } finally { missing.close?.(); }
   const endless = createRemoteSource(address, async () => new Response(new ReadableStream({ pull: () => new Promise(() => {}) })));
   endless.close?.();
-  let closed = false;
-  for (let attempt = 0; attempt < 100 && !closed; attempt++) { closed = endless.read(1600) === null; await settle(50); }
-  expect(closed).toBe(true);
+  expect(await readToEnd(endless, () => { sound = true; }, 1600)).toBe(true);
+  expect(sound).toBe(false);
 }, 20_000);
 
 it("gives up on a download that stops sending, and ends with the audio it received", async () => {
@@ -67,13 +72,7 @@ it("gives up on a download that stops sending, and ends with the audio it receiv
     pull: () => new Promise(() => {})
   })), undefined, 300);
   let heard = false;
-  let ended = false;
-  for (let attempt = 0; attempt < 100 && !ended; attempt++) {
-    const chunk = source.read(1600);
-    if (chunk === null) ended = true; else heard ||= chunk.some(value => value !== 0);
-    await settle(50);
-  }
-  expect(ended).toBe(true);
+  try { expect(await readToEnd(source, () => { heard = true; }, 1600)).toBe(true); } finally { source.close?.(); }
   expect(heard).toBe(true);
 }, 20_000);
 

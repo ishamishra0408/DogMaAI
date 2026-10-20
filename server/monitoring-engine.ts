@@ -64,23 +64,21 @@ export function createMonitoringState(sessionId: string): MonitoringEngineState 
 
 function observableSignature(observation: CandidateObservation): string {
   return JSON.stringify({
-    children_visible: observation.children_visible,
-    children_in_cribs: observation.children_in_cribs,
-    children_outside_cribs: observation.children_outside_cribs,
-    caregiver_visible: observation.caregiver_visible,
-    activity_level: observation.activity_level,
-    pillows_on_floor: observation.pillows_on_floor
+    dog_visible: observation.dog_visible,
+    dog_activity: observation.dog_activity,
+    dog_location: observation.dog_location,
+    person_visible: observation.person_visible,
+    chewing_items: observation.chewing_items
   });
 }
 
 function roomSignature(room: RoomState): string {
   return JSON.stringify({
-    children_visible: room.children_visible,
-    children_in_cribs: room.children_in_cribs,
-    children_outside_cribs: room.children_outside_cribs,
-    caregiver_visible: room.caregiver_visible,
-    activity_level: room.activity_level,
-    pillows_on_floor: room.pillows_on_floor
+    dog_visible: room.dog_visible,
+    dog_activity: room.dog_activity,
+    dog_location: room.dog_location,
+    person_visible: room.person_visible,
+    chewing_items: room.chewing_items
   });
 }
 
@@ -113,21 +111,17 @@ function activeSituation(state: MonitoringEngineState, type: SituationType): Sit
   return state.situations.find((situation) => situation.type === type && situation.status !== "resolved");
 }
 
+// "Alone" needs a confirmed absence of people; an unknown person count never opens a situation.
 function situationCondition(type: SituationType, room: RoomState): boolean {
-  if (type === "child_out_of_crib") return typeof room.children_outside_cribs === "number" && room.children_outside_cribs > 0;
-  if (type === "active_play_during_sleep_period") return room.activity_level === "active_play";
-  return room.pillows_on_floor === true;
+  if (type === "restless_alone") return room.dog_activity === "moving" && room.person_visible === false;
+  if (type === "waiting_at_door") return room.dog_location === "door" && room.person_visible === false;
+  return room.chewing_items === true;
 }
 
 function situationResolved(type: SituationType, room: RoomState): boolean {
-  if (type === "child_out_of_crib") {
-    return room.children_outside_cribs === 0
-      && typeof room.children_visible === "number"
-      && room.children_visible > 0
-      && room.children_in_cribs === room.children_visible;
-  }
-  if (type === "active_play_during_sleep_period") return room.activity_level === "quiet";
-  return room.pillows_on_floor === false;
+  if (type === "restless_alone") return room.dog_activity === "resting" || room.person_visible === true;
+  if (type === "waiting_at_door") return (room.dog_location !== "door" && room.dog_location !== "unknown") || room.person_visible === true;
+  return room.chewing_items === false;
 }
 
 function createSituation(
@@ -146,8 +140,7 @@ function createSituation(
     resolved_at: null,
     latest_evidence_frame_id: observation.frame_id,
     recurrence_of: previous?.id ?? null,
-    peak_children_outside_cribs: typeof observation.children_outside_cribs === "number" ? observation.children_outside_cribs : 0,
-    caregiver_intervened: observation.caregiver_visible === true,
+    person_returned: observation.person_visible === true,
     evidence_frame_ids: [observation.frame_id],
     alert_timer_paused_seconds: 0,
     uncertainty_started_at: null
@@ -162,9 +155,9 @@ function reconcileSituations(
 ): MonitoringEngineState {
   let next = state;
   const situationTypes: SituationType[] = [
-    "child_out_of_crib",
-    "active_play_during_sleep_period",
-    "room_disrupted"
+    "restless_alone",
+    "waiting_at_door",
+    "chewing_items"
   ];
 
   for (const type of situationTypes) {
@@ -211,12 +204,8 @@ function reconcileSituations(
     const pausedSeconds = existing.alert_timer_paused_seconds + Math.max(0, pauseAdded);
     const activeDuration = observation.observed_at_seconds - existing.started_at - pausedSeconds;
     const shouldAlert = existing.alerted_at === null && activeDuration >= config.alertAfterSeconds;
-    const caregiverIntervened = existing.caregiver_intervened || observation.caregiver_visible === true;
-    const observedPeak = typeof observation.children_outside_cribs === "number" ? observation.children_outside_cribs : 0;
-    const peak = Math.max(existing.peak_children_outside_cribs, observedPeak);
-    const meaningfulUpdate = resumedFromUncertainty
-      || caregiverIntervened !== existing.caregiver_intervened
-      || peak !== existing.peak_children_outside_cribs;
+    const personReturned = existing.person_returned || observation.person_visible === true;
+    const meaningfulUpdate = resumedFromUncertainty || personReturned !== existing.person_returned;
 
     let updated = existing;
     if (meaningfulUpdate || shouldAlert) {
@@ -228,8 +217,7 @@ function reconcileSituations(
         alerted_at: shouldAlert ? observation.observed_at_seconds : existing.alerted_at,
         latest_evidence_frame_id: observation.frame_id,
         evidence_frame_ids: appendEvidence(existing, observation.frame_id),
-        caregiver_intervened: caregiverIntervened,
-        peak_children_outside_cribs: peak,
+        person_returned: personReturned,
         alert_timer_paused_seconds: pausedSeconds,
         uncertainty_started_at: null
       };
@@ -327,12 +315,11 @@ export function processObservation(
 
       if (provisional.count >= config.confirmationCount) {
         const patch: Partial<RoomState> = {
-          children_visible: observation.children_visible,
-          children_in_cribs: observation.children_in_cribs,
-          children_outside_cribs: observation.children_outside_cribs,
-          caregiver_visible: observation.caregiver_visible,
-          activity_level: observation.activity_level,
-          pillows_on_floor: observation.pillows_on_floor,
+          dog_visible: observation.dog_visible,
+          dog_activity: observation.dog_activity,
+          dog_location: observation.dog_location,
+          person_visible: observation.person_visible,
+          chewing_items: observation.chewing_items,
           camera_view: "usable",
           observed_at_seconds: observation.observed_at_seconds,
           stale: false,

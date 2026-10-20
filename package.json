@@ -1,5 +1,5 @@
 {
-  "name": "nursery-activity-monitor",
+  "name": "dogmaai",
   "private": true,
   "version": "0.1.0",
   "type": "module",
@@ -11,10 +11,18 @@
     "start": "tsx server/index.ts",
     "typecheck": "tsc -b",
     "test": "vitest run --passWithNoTests",
-    "verify:demo": "tsx scripts/verify-demo.ts"
+    "verify:demo": "tsx scripts/verify-demo.ts",
+    "vision": "tsx scripts/vision-server.ts",
+    "camera:setup": "tsx scripts/set-home-camera.ts",
+    "camera:speaker:setup": "tsx scripts/set-camera-speaker.ts",
+    "tinybird:setup": "tsx scripts/tinybird-setup.ts",
+    "sound-model:setup": "tsx scripts/sound-model-setup.ts"
   },
   "dependencies": {
     "@nimble-way/nimble-js": "^1.5.0",
+    "@tensorflow/tfjs-backend-wasm": "4.22.0",
+    "@tensorflow/tfjs-converter": "4.22.0",
+    "@tensorflow/tfjs-core": "4.22.0",
     "@vitejs/plugin-react": "latest",
     "better-sqlite3": "latest",
     "dotenv": "^18.0.4",

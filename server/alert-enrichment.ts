@@ -1,6 +1,6 @@
 import Nimble from "@nimble-way/nimble-js";
-import type { ParentNotification, ResearchSource } from "../shared/api.js";
-import type { Situation } from "../shared/domain.js";
+import type { OwnerNotification, ResearchSource } from "../shared/api.js";
+import { situationLabels, type Situation } from "../shared/domain.js";
 
 export interface AlertContext {
   sessionId: string;
@@ -9,26 +9,33 @@ export interface AlertContext {
 }
 
 export interface AlertEnricher {
-  readonly mode: ParentNotification["research_provider"];
-  enrich(context: AlertContext): Promise<Pick<ParentNotification, "message" | "research_summary" | "sources">>;
+  readonly mode: OwnerNotification["research_provider"];
+  enrich(context: AlertContext): Promise<Pick<OwnerNotification, "message" | "research_summary" | "sources">>;
 }
 
+// Behaviour guidance from veterinary and animal-welfare organisations; the same sites bound the live search.
+const guidanceDomains = ["aspca.org", "vcahospitals.com", "akc.org", "humanesociety.org"];
 const fallbackSources: ResearchSource[] = [
   {
-    title: "Safe Sleep",
-    url: "https://www.healthychildren.org/English/ages-stages/baby/sleep/Pages/a-parents-guide-to-safe-sleep.aspx",
-    snippet: "General safe-sleep guidance for parents from the American Academy of Pediatrics."
+    title: "Separation Anxiety",
+    url: "https://www.aspca.org/pet-care/dog-care/common-dog-behavior-issues/separation-anxiety",
+    snippet: "Signs of separation anxiety and how to help, from the ASPCA."
   },
   {
-    title: "Cribs and Infant Products",
-    url: "https://www.cpsc.gov/SafeSleep",
-    snippet: "Federal safe-sleep and nursery-product guidance from the U.S. Consumer Product Safety Commission."
+    title: "Separation Anxiety in Dogs",
+    url: "https://vcahospitals.com/know-your-pet/separation-anxiety-in-dogs",
+    snippet: "A veterinary overview of causes and treatment from VCA Animal Hospitals."
+  },
+  {
+    title: "Separation Anxiety in Dogs",
+    url: "https://www.akc.org/expert-advice/training/separation-anxiety-in-dogs/",
+    snippet: "Training approaches for dogs that struggle when left alone, from the American Kennel Club."
   }
 ];
 
-function parentMessage(context: AlertContext): string {
+function ownerMessage(context: AlertContext): string {
   const seconds = Math.round(context.videoTimestamp);
-  return `NurserAI observed a child outside a crib for the configured alert period at ${seconds}s. Please check the nursery now. The links below are general safety guidance, not a diagnosis.`;
+  return `DogMaAI saw "${situationLabels[context.situation.type].toLowerCase()}" for the alert period at ${seconds}s. Check on your dog; calm music from Comfort tools may help it settle. The links below are general guidance, not a diagnosis.`;
 }
 
 export class DemoSafetyResearchProvider implements AlertEnricher {
@@ -36,8 +43,8 @@ export class DemoSafetyResearchProvider implements AlertEnricher {
 
   async enrich(context: AlertContext) {
     return {
-      message: parentMessage(context),
-      research_summary: "Live Nimble search is not configured, so NurserAI attached a small, preselected set of authoritative safety resources.",
+      message: ownerMessage(context),
+      research_summary: "Live Nimble search is not configured, so DogMaAI attached a small, preselected set of guidance from animal-welfare organisations.",
       sources: fallbackSources
     };
   }
@@ -53,8 +60,8 @@ export class NimbleSafetyResearchProvider implements AlertEnricher {
 
   async enrich(context: AlertContext) {
     const result = await this.client.search({
-      query: "authoritative toddler climbed out of crib parent safety guidance what to do",
-      include_domains: ["healthychildren.org", "cpsc.gov"],
+      query: `dog ${situationLabels[context.situation.type].toLowerCase()} when left home alone what owners can do`,
+      include_domains: guidanceDomains,
       search_depth: "lite",
       max_results: 3,
       include_answer: true,
@@ -66,9 +73,9 @@ export class NimbleSafetyResearchProvider implements AlertEnricher {
       url: item.url,
       snippet: item.description.slice(0, 240)
     }));
-    if (sources.length === 0) throw new Error("Nimble returned no vetted safety sources");
+    if (sources.length === 0) throw new Error("Nimble returned no vetted guidance sources");
     return {
-      message: parentMessage(context),
+      message: ownerMessage(context),
       research_summary: result.answer?.slice(0, 600) ?? "Nimble found current guidance from the vetted sources below.",
       sources
     };

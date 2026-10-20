@@ -1,5 +1,7 @@
 DESCRIPTION >
-    Append-only NurserAI observation and state-mutation telemetry.
+    Append-only DogMaAI observation and state-mutation telemetry.
+
+TOKEN "dogmaai_app" APPEND
 
 SCHEMA >
     `event_id` String `json:$.event_id`,
@@ -15,6 +17,6 @@ SCHEMA >
     `working_state_bytes` UInt32 `json:$.working_state_bytes`,
     `payload` String `json:$.payload`
 
-ENGINE "MergeTree"
-ENGINE_PARTITION_KEY "toYYYYMM(event_time)"
-ENGINE_SORTING_KEY "session_id, event_time, state_version"
+ENGINE MergeTree
+ENGINE_PARTITION_KEY toYYYYMM(event_time)
+ENGINE_SORTING_KEY session_id, event_time, state_version

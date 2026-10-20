@@ -17,24 +17,17 @@ export interface TelemetryEvent {
 }
 
 export interface TelemetrySink {
-  readonly mode: "tinybird_live" | "tinybird_ready" | "tinybird_error" | "disabled";
   send(events: TelemetryEvent[]): Promise<void>;
 }
 
 export class DisabledTelemetrySink implements TelemetrySink {
-  readonly mode = "disabled" as const;
   async send(_events: TelemetryEvent[]): Promise<void> {}
 }
 
 export class TinybirdTelemetrySink implements TelemetrySink {
-  private currentMode: "tinybird_ready" | "tinybird_live" | "tinybird_error" = "tinybird_ready";
   private permanentlyBlocked = false;
   private retryAfter = 0;
   private readonly endpoint: string;
-
-  get mode(): "tinybird_ready" | "tinybird_live" | "tinybird_error" {
-    return this.currentMode;
-  }
 
   constructor(
     private readonly token: string,
@@ -61,10 +54,8 @@ export class TinybirdTelemetrySink implements TelemetrySink {
         error.status = response.status;
         throw error;
       }
-      this.currentMode = "tinybird_live";
       this.retryAfter = 0;
     } catch (error) {
-      this.currentMode = "tinybird_error";
       const status = typeof error === "object" && error !== null && "status" in error
         ? Number((error as { status: unknown }).status)
         : 0;

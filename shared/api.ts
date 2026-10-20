@@ -15,7 +15,7 @@ export interface ResearchSource {
   snippet: string;
 }
 
-export interface ParentNotification {
+export interface OwnerNotification {
   id: string;
   situation_id: string;
   created_at_video_seconds: number;
@@ -41,9 +41,5 @@ export interface RuntimeSnapshot {
   };
   latest_observation: CandidateObservation | null;
   latest_mutations: StateMutation[];
-  parent_notifications: ParentNotification[];
-  integrations: {
-    nimble: { mode: ParentNotification["research_provider"] };
-    tinybird: { mode: "tinybird_live" | "tinybird_ready" | "tinybird_error" | "disabled" };
-  };
+  owner_notifications: OwnerNotification[];
 }

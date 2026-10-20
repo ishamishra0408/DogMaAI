@@ -32,12 +32,11 @@ export class MockVisionProvider implements VisualObservationProvider {
         frame_id: frame.frameId,
         observed_at_seconds: frame.videoTimestamp,
         camera_view: "occluded",
-        children_visible: "unknown",
-        children_in_cribs: "unknown",
-        children_outside_cribs: "unknown",
-        caregiver_visible: "unknown",
-        activity_level: "unknown",
-        pillows_on_floor: "unknown",
+        dog_visible: "unknown",
+        dog_activity: "unknown",
+        dog_location: "unknown",
+        person_visible: "unknown",
+        chewing_items: "unknown",
         uncertainties: ["Temporary camera occlusion enabled in demo controls."],
         short_description: "The room cannot be assessed because the camera is temporarily occluded."
       };

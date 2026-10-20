@@ -1,0 +1,16 @@
+DESCRIPTION >
+    DogMaAI events: comfort sounds as they start. PetAnalytics uses them to see whether the music helped: the dog's activity and crying before and after each sound, and how fast it settled when alone. Older rows may also hold meals logged with the Fed button, which PetAnalytics no longer uses.
+
+TOKEN "dogmaai_app" APPEND
+TOKEN "dogmaai_app" READ
+
+SCHEMA >
+    `event_id` String `json:$.event_id`,
+    `observed_at` DateTime64(3) `json:$.observed_at`,
+    `kind` LowCardinality(String) `json:$.kind`,
+    `detail` String `json:$.detail`,
+    `source` LowCardinality(String) `json:$.source`
+
+ENGINE MergeTree
+ENGINE_PARTITION_KEY toYYYYMM(observed_at)
+ENGINE_SORTING_KEY observed_at, event_id

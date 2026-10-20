@@ -1,0 +1,17 @@
+DESCRIPTION >
+    DogMaAI camera readings: what Liquid AI read about the dog in each analysed image, about every 12 seconds while the camera is watched. PetAnalytics is built from these.
+
+TOKEN "dogmaai_app" APPEND
+TOKEN "dogmaai_app" READ
+
+SCHEMA >
+    `observed_at` DateTime64(3) `json:$.observed_at`,
+    `dog_visible` LowCardinality(String) `json:$.dog_visible`,
+    `activity` LowCardinality(String) `json:$.activity`,
+    `location` LowCardinality(String) `json:$.location`,
+    `person_visible` LowCardinality(String) `json:$.person_visible`,
+    `camera` LowCardinality(String) `json:$.camera`
+
+ENGINE MergeTree
+ENGINE_PARTITION_KEY toYYYYMM(observed_at)
+ENGINE_SORTING_KEY observed_at

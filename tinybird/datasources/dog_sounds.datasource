@@ -1,0 +1,16 @@
+DESCRIPTION >
+    DogMaAI sound minutes: for each minute the home camera's microphone was heard, how many seconds the dog was crying (a whimper or a howl) or barking, as recognised by the YAMNet sound model on the owner's computer. No audio is stored. PetAnalytics reads these.
+
+TOKEN "dogmaai_app" APPEND
+TOKEN "dogmaai_app" READ
+
+SCHEMA >
+    `observed_at` DateTime64(3) `json:$.observed_at`,
+    `camera` LowCardinality(String) `json:$.camera`,
+    `heard_seconds` UInt16 `json:$.heard_seconds`,
+    `crying_seconds` UInt16 `json:$.crying_seconds`,
+    `barking_seconds` UInt16 `json:$.barking_seconds`
+
+ENGINE MergeTree
+ENGINE_PARTITION_KEY toYYYYMM(observed_at)
+ENGINE_SORTING_KEY observed_at

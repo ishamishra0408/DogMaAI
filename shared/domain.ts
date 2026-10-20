@@ -1,29 +1,28 @@
 export type KnownOrUnknown<T> = T | "unknown";
 
-export type ActivityLevel = "quiet" | "moving" | "active_play";
+export type DogActivity = "resting" | "moving" | "playing";
+export type DogLocation = "bed" | "floor" | "furniture" | "door";
 export type CameraView = "usable" | "occluded" | "unusable" | "unknown";
 
 export interface CandidateObservation {
   frame_id: string;
   observed_at_seconds: number;
   camera_view: CameraView;
-  children_visible: KnownOrUnknown<number>;
-  children_in_cribs: KnownOrUnknown<number>;
-  children_outside_cribs: KnownOrUnknown<number>;
-  caregiver_visible: KnownOrUnknown<boolean>;
-  activity_level: KnownOrUnknown<ActivityLevel>;
-  pillows_on_floor: KnownOrUnknown<boolean>;
+  dog_visible: KnownOrUnknown<boolean>;
+  dog_activity: KnownOrUnknown<DogActivity>;
+  dog_location: KnownOrUnknown<DogLocation>;
+  person_visible: KnownOrUnknown<boolean>;
+  chewing_items: KnownOrUnknown<boolean>;
   uncertainties: string[];
   short_description: string;
 }
 
 export interface RoomState {
-  children_visible: KnownOrUnknown<number>;
-  children_in_cribs: KnownOrUnknown<number>;
-  children_outside_cribs: KnownOrUnknown<number>;
-  caregiver_visible: KnownOrUnknown<boolean>;
-  activity_level: KnownOrUnknown<ActivityLevel>;
-  pillows_on_floor: KnownOrUnknown<boolean>;
+  dog_visible: KnownOrUnknown<boolean>;
+  dog_activity: KnownOrUnknown<DogActivity>;
+  dog_location: KnownOrUnknown<DogLocation>;
+  person_visible: KnownOrUnknown<boolean>;
+  chewing_items: KnownOrUnknown<boolean>;
   camera_view: CameraView;
   observed_at_seconds: number | null;
   stale: boolean;
@@ -31,9 +30,9 @@ export interface RoomState {
 }
 
 export type SituationType =
-  | "child_out_of_crib"
-  | "active_play_during_sleep_period"
-  | "room_disrupted";
+  | "restless_alone"
+  | "waiting_at_door"
+  | "chewing_items";
 
 export type SituationStatus =
   | "pending"
@@ -52,8 +51,7 @@ export interface Situation {
   resolved_at: number | null;
   latest_evidence_frame_id: string;
   recurrence_of: string | null;
-  peak_children_outside_cribs: number;
-  caregiver_intervened: boolean;
+  person_returned: boolean;
   evidence_frame_ids: string[];
   alert_timer_paused_seconds: number;
   uncertainty_started_at: number | null;
@@ -85,14 +83,19 @@ export interface SessionState {
 }
 
 export const initialRoomState: RoomState = {
-  children_visible: "unknown",
-  children_in_cribs: "unknown",
-  children_outside_cribs: "unknown",
-  caregiver_visible: "unknown",
-  activity_level: "unknown",
-  pillows_on_floor: "unknown",
+  dog_visible: "unknown",
+  dog_activity: "unknown",
+  dog_location: "unknown",
+  person_visible: "unknown",
+  chewing_items: "unknown",
   camera_view: "unknown",
   observed_at_seconds: null,
   stale: true,
   uncertainties: ["Waiting for the first usable observation"]
+};
+
+export const situationLabels: Record<SituationType, string> = {
+  restless_alone: "Restless while alone",
+  waiting_at_door: "Waiting at the door",
+  chewing_items: "Chewing household items"
 };

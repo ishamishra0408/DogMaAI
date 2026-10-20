@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import "./phone.css";
+import { adoptComfortAudio, playLocalComfort } from "./comfort";
+import { comfortLabels, isComfortAction, type ComfortAction } from "../shared/comfort";
 
 // Keep pairing credentials in memory, not browser history, storage or referrers.
 const fragment = new URLSearchParams(location.hash.slice(1));
@@ -14,7 +16,6 @@ function PhoneCamera() {
   const generation = useRef(0);
   const wakeLock = useRef<WakeLockSentinel | null>(null);
   const sound = useRef<AudioContext | null>(null);
-  const output = useRef<GainNode | null>(null);
   const heard = useRef(0);
   const [soundReady, setSoundReady] = useState(false);
   const [soundLabel, setSoundLabel] = useState("");
@@ -48,10 +49,11 @@ function PhoneCamera() {
     async function check() {
       try {
         const response = await fetch(`/api/camera/${pairing.id}/action?after=${heard.current}`, { headers: { Authorization: `Bearer ${sender.current}` }, cache: "no-store" });
-        if (response.status === 403) return;
+        // Dog sounds play until stopped, so an ended pairing must silence them here.
+        if (response.status === 403) { stopSound(); return; }
         if (response.ok && response.status !== 204) {
-          const action = await response.json() as { sequence: number; type: "lullaby" | "voice" | "stop" };
-          if (!stopped && action.sequence > heard.current) { heard.current = action.sequence; playAction(action.type); }
+          const action = await response.json() as { sequence: number; type: unknown };
+          if (!stopped && action.sequence > heard.current) { heard.current = action.sequence; if (isComfortAction(action.type)) playAction(action.type); }
         }
       } catch { /* A later poll may recover. */ }
       if (!stopped) timer = setTimeout(() => void check(), 600);
@@ -60,48 +62,33 @@ function PhoneCamera() {
     return () => { stopped = true; clearTimeout(timer); };
   }, [soundReady, state]);
   function stopSound() {
-    speechSynthesis.cancel();
-    if (output.current) output.current.gain.value = 0;
+    playLocalComfort("stop");
     setSoundLabel("");
   }
-  function playAction(type: "lullaby" | "voice" | "stop") {
-    stopSound();
-    if (type === "stop") return;
-    if (type === "voice") {
-      const phrase = new SpeechSynthesisUtterance("I'm here with you. You're safe. I'll check on you now.");
-      phrase.volume = .55; phrase.rate = .85;
-      speechSynthesis.speak(phrase);
-      setSoundLabel("Speaking to baby");
-      return;
-    }
-    const context = sound.current;
-    if (!context) return;
-    void context.resume();
-    const gain = context.createGain(); gain.gain.value = .12; gain.connect(context.destination); output.current = gain;
-    const notes = [392, 440, 392, 330, 349, 392, 330, 294, 330, 349, 294, 262];
-    notes.forEach((frequency, index) => {
-      const oscillator = context.createOscillator();
-      const envelope = context.createGain();
-      const start = context.currentTime + index * .5;
-      oscillator.type = "sine"; oscillator.frequency.value = frequency;
-      envelope.gain.setValueAtTime(0, start);
-      envelope.gain.linearRampToValueAtTime(.16, start + .04);
-      envelope.gain.exponentialRampToValueAtTime(.001, start + .47);
-      oscillator.connect(envelope); envelope.connect(gain);
-      oscillator.start(start); oscillator.stop(start + .5);
-    });
-    setSoundLabel("Playing lullaby");
+  function playAction(type: ComfortAction) {
+    playLocalComfort(type);
+    setSoundLabel(type === "stop" ? "" : comfortLabels[type]);
   }
   async function enableSound() {
     try {
       const context = new AudioContext(); await context.resume();
       sound.current = context;
-      const phrase = new SpeechSynthesisUtterance("Sound is ready."); phrase.volume = .45;
-      speechSynthesis.speak(phrase);
+      adoptComfortAudio(context);
+      // A soft two-note chime confirms sound works; no voice plays near the dog.
+      for (const [offset, frequency] of [[0, 523.25], [0.18, 659.25]]) {
+        const tone = context.createOscillator(); const gain = context.createGain();
+        tone.frequency.value = frequency; tone.connect(gain).connect(context.destination);
+        const start = context.currentTime + offset;
+        gain.gain.setValueAtTime(0.0001, start); gain.gain.exponentialRampToValueAtTime(0.08, start + 0.02); gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.35);
+        tone.start(start); tone.stop(start + 0.4);
+      }
       const response = await fetch(`/api/camera/${pairing.id}/speaker`, { method: "POST", headers: { Authorization: `Bearer ${sender.current}`, "Content-Type": "application/json" }, body: JSON.stringify({ enabled: true }) });
       if (!response.ok) throw new Error("Could not enable sound. Reconnect the phone and try again.");
       setSoundReady(true); setError("");
-    } catch (reason) { setError(reason instanceof Error ? reason.message : "Sound is unavailable on this phone."); }
+    } catch (reason) {
+      void sound.current?.close(); sound.current = null; adoptComfortAudio(null);
+      setError(reason instanceof Error ? reason.message : "Sound is unavailable on this phone.");
+    }
   }
   async function start() {
     if (!valid || state === "starting" || state === "live") return;
@@ -154,20 +141,20 @@ function PhoneCamera() {
       }
     } catch (reason) {
       if (run !== generation.current) return;
-      release(); setState("error");
+      release(); stopSound(); setState("error");
       const message = reason instanceof Error ? reason.message : "Could not start the camera.";
       setError(reason instanceof DOMException && reason.name === "NotAllowedError" ? "Camera access was declined. Allow this site to use your camera, then try again." : message);
     }
   }
   function stop() {
-    stopSound(); void sound.current?.close(); sound.current = null; setSoundReady(false);
+    stopSound(); void sound.current?.close(); sound.current = null; adoptComfortAudio(null); setSoundReady(false);
     release(); setState("stopped"); setError("");
     const key = sender.current;
     sender.current = null;
     if (key) void fetch(`/api/camera/${pairing.id}`, { method: "DELETE", headers: { Authorization: `Bearer ${key}` }, keepalive: true }).catch(() => {});
   }
   return <main className="phone-page">
-    <span className="phone-eyebrow">Nursery camera</span>
+    <span className="phone-eyebrow">DogMaAI camera</span>
     <h1>{state === "live" ? "You’re connected." : state === "stopped" ? "Camera stopped." : "Use your phone as a camera."}</h1>
     <p>{state === "stopped" ? "Create a new link in the manager to connect again." : "Keep this page open and your phone plugged in."}</p>
     <div className="phone-view"><video ref={preview} muted playsInline autoPlay /><span>{state === "live" ? hidden ? "Paused in background" : "Sharing with your manager" : "Rear camera · No audio"}</span></div>

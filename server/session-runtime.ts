@@ -1,6 +1,6 @@
 import { EventEmitter } from "node:events";
-import type { CandidateObservation, Situation, StateMutation } from "../shared/domain.js";
-import type { ParentNotification, PlaybackStatus, RuntimeSnapshot, TimelineEvent } from "../shared/api.js";
+import { situationLabels, type CandidateObservation, type Situation, type StateMutation } from "../shared/domain.js";
+import type { OwnerNotification, PlaybackStatus, RuntimeSnapshot, TimelineEvent } from "../shared/api.js";
 import {
   createMonitoringState,
   processObservation,
@@ -51,14 +51,15 @@ export class SessionRuntime extends EventEmitter {
   private processing = false;
   private pendingTimestamp: number | null = null;
   private manualOcclusion = false;
-  private parentNotifications: ParentNotification[] = [];
+  private ownerNotifications: OwnerNotification[] = [];
   private notificationGeneration = 0;
 
   constructor(
     readonly id: string,
     private readonly provider: VisualObservationProvider,
     readonly sampleInterval = 2,
-    readonly duration = 100,
+    // Length of the bundled cage clip, which the sample observations describe.
+    readonly duration = 32,
     private readonly persistence?: RuntimePersistence,
     private readonly alertEnricher?: AlertEnricher,
     private readonly telemetrySink?: TelemetrySink
@@ -82,11 +83,7 @@ export class SessionRuntime extends EventEmitter {
       },
       latest_observation: this.latestObservation,
       latest_mutations: this.latestMutations,
-      parent_notifications: this.parentNotifications,
-      integrations: {
-        nimble: { mode: this.alertEnricher?.mode ?? "demo_fallback" },
-        tinybird: { mode: this.telemetrySink?.mode ?? "disabled" }
-      }
+      owner_notifications: this.ownerNotifications
     };
   }
 
@@ -137,7 +134,7 @@ export class SessionRuntime extends EventEmitter {
           });
       }
       for (const mutation of result.mutations) {
-        if (mutation.type === "ALERT_EMITTED") this.beginParentNotification(mutation.situationId, timestamp);
+        if (mutation.type === "ALERT_EMITTED") this.beginOwnerNotification(mutation.situationId, timestamp);
       }
       this.emit("update", this.snapshot());
     } finally {
@@ -178,17 +175,6 @@ export class SessionRuntime extends EventEmitter {
     this.stopTimer();
     this.status = "paused";
     this.emit("update", this.snapshot());
-  }
-
-  async seek(videoTimestamp: number): Promise<void> {
-    const wasPlaying = this.status === "playing";
-    const speed = this.speed;
-    this.stopTimer();
-    this.resetState();
-    await this.processUntil(videoTimestamp);
-    this.status = "paused";
-    if (wasPlaying) this.start(speed);
-    else this.emit("update", this.snapshot());
   }
 
   reset(): void {
@@ -277,7 +263,7 @@ export class SessionRuntime extends EventEmitter {
     this.events = [];
     this.latestObservation = null;
     this.latestMutations = [];
-    this.parentNotifications = [];
+    this.ownerNotifications = [];
     this.notificationGeneration += 1;
     this.status = "idle";
     this.currentTime = 0;
@@ -295,30 +281,30 @@ export class SessionRuntime extends EventEmitter {
     };
   }
 
-  private beginParentNotification(situationId: string, videoTimestamp: number): void {
-    if (!this.alertEnricher || this.parentNotifications.some((item) => item.situation_id === situationId)) return;
+  private beginOwnerNotification(situationId: string, videoTimestamp: number): void {
+    if (!this.alertEnricher || this.ownerNotifications.some((item) => item.situation_id === situationId)) return;
     const situation = this.state.situations.find((item) => item.id === situationId);
     if (!situation) return;
     const generation = this.notificationGeneration;
-    const pending: ParentNotification = {
-      id: `notification_${this.parentNotifications.length + 1}`,
+    const pending: OwnerNotification = {
+      id: `notification_${this.ownerNotifications.length + 1}`,
       situation_id: situationId,
       created_at_video_seconds: videoTimestamp,
       status: "researching",
       channel: "in_app_demo",
       research_provider: this.alertEnricher.mode,
-      subject: "NurserAI: check the nursery",
-      message: "Please check the nursery now. Safety resources are loading…",
+      subject: "DogMaAI: check on your dog",
+      message: "Please check on your dog. Guidance is loading…",
       research_summary: null,
       sources: []
     };
-    this.parentNotifications = [pending, ...this.parentNotifications];
+    this.ownerNotifications = [pending, ...this.ownerNotifications];
 
     let researchTimeout: NodeJS.Timeout | undefined;
     const research = Promise.race([
       this.alertEnricher.enrich({ sessionId: this.id, situation, videoTimestamp }),
       new Promise<never>((_resolve, reject) => {
-        researchTimeout = setTimeout(() => reject(new Error("Safety research timed out")), 10_000);
+        researchTimeout = setTimeout(() => reject(new Error("Guidance research timed out")), 10_000);
       })
     ]);
 
@@ -332,16 +318,16 @@ export class SessionRuntime extends EventEmitter {
         this.replaceNotification(pending.id, {
           ...pending,
           status: "sent",
-          message: `NurserAI confirmed a concerning nursery situation at ${Math.round(videoTimestamp)}s. Please check the nursery now. Safety research was temporarily unavailable.`,
-          research_summary: "The parent alert was delivered, but the live Nimble lookup could not complete.",
+          message: `DogMaAI confirmed "${situationLabels[situation.type].toLowerCase()}" at ${Math.round(videoTimestamp)}s. Please check on your dog. Guidance was temporarily unavailable.`,
+          research_summary: "The alert was delivered, but the live Nimble lookup could not complete.",
           sources: []
         });
       })
       .finally(() => { if (researchTimeout) clearTimeout(researchTimeout); });
   }
 
-  private replaceNotification(id: string, replacement: ParentNotification): void {
-    this.parentNotifications = this.parentNotifications.map((item) => item.id === id ? replacement : item);
+  private replaceNotification(id: string, replacement: OwnerNotification): void {
+    this.ownerNotifications = this.ownerNotifications.map((item) => item.id === id ? replacement : item);
     this.emit("update", this.snapshot());
   }
 

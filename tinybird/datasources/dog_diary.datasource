@@ -1,0 +1,19 @@
+DESCRIPTION >
+    DogMaAI dog diary: Liquid AI's description of the dog, one row each time its activity or place changes.
+
+TOKEN "dogmaai_app" APPEND
+TOKEN "dogmaai_app" READ
+
+SCHEMA >
+    `entry_id` String `json:$.entry_id`,
+    `observed_at` DateTime64(3) `json:$.observed_at`,
+    `description` String `json:$.description`,
+    `dog_visible` LowCardinality(String) `json:$.dog_visible`,
+    `activity` LowCardinality(String) `json:$.activity`,
+    `location` LowCardinality(String) `json:$.location`,
+    `model` LowCardinality(String) `json:$.model`,
+    `camera` LowCardinality(String) `json:$.camera`
+
+ENGINE MergeTree
+ENGINE_PARTITION_KEY toYYYYMM(observed_at)
+ENGINE_SORTING_KEY observed_at, entry_id
